@@ -9,6 +9,8 @@
 | 工具 | 作用 |
 |---|---|
 | `feishu_bitable` | 新建**多维表格**（一次调用建库 + 建表 + 建字段）；列出表与字段；批量增删改查记录 |
+| `feishu_dashboard` | 在多维表格里建**仪表盘和图表**（柱状图／条形图／折线图／饼图／环形图／面积图／组合图／散点图／漏斗图／词云／雷达图／排行榜／指标卡／NPS／文本，共 15 种），可指定位置，并读回图表算好的数据 |
+| `feishu_query` | 跑**分组聚合查询**（维度分组 + sum/avg/min/max/count/distinct_count + 筛选 + 排序 + Top N），聚合在服务端完成 |
 | `feishu_doc` | 新建文档；把 **Markdown 转成原生块**追加；追加原始块；读纯文本；把本地 md/docx/xlsx/pptx/pdf **导入**成云文档 |
 | `feishu_sheet` | 新建电子表格；加 sheet；按 A1 区域读 / 写 / 追加 |
 | `feishu_drive` | 浏览目录、建文件夹、上传下载、移动、删除、批量取元数据 |
@@ -108,6 +110,36 @@ pwsh -File scripts/install.ps1
 环境变量兜底：`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_BRAND`、`FEISHU_FOLDER_TOKEN`、`FEISHU_USER_ACCESS_TOKEN`。
 
 ---
+
+## 两代多维表格接口
+
+插件**刻意同时使用**两代接口：
+
+- **V1**（`/bitable/v1/apps/...`）：建库、表、字段、记录。它是公开文档化的接口，也是官方 Lark/飞书 SDK 里有的那套。
+- **V3**（`/base/v3/bases/...`）：只用于 V1 完全没有的两件事 —— **仪表盘图表**和**服务端聚合**。注意资源名是 `bases` 不是 `apps`：两代路径不能互换，问错版本只会得到纯文本的 `404 page not found`，而不是业务错误码。
+
+V3 比已发布的 SDK 还新，所以从 SDK 的类型定义里找不到它；这里的参数结构取自官方 [Lark CLI](https://github.com/larksuite/cli)，并已对着线上接口逐一验证。
+
+| | V1 | V3 |
+|---|---|---|
+| 字段类型 | 数字（`1`=文本） | 字符串（`"text"`） |
+| 记录形态 | 行对象 `{record_id, fields}` | **列式矩阵** `data` + `field_id_list` |
+| 批量写 | `{records: [{fields}]}` | `record_id_list` / `by_filter` + `patch` |
+| 聚合 | 无 | `POST .../data/query`，DSL 用**表名／字段名** |
+| 图表 | 无 | `dashboards` + `dashboards/{id}/blocks` |
+
+一个图表 block 完全由一个 `data_config` 描述，里面用**表名和字段名**、不用 ID：
+
+```json
+{
+  "table_name": "订单表",
+  "series": [{ "field_name": "金额", "rollup": "SUM" }],
+  "group_by": [{ "field_name": "类别", "mode": "integrated", "sort": { "type": "value", "order": "desc" } }],
+  "filter": { "conjunction": "and", "conditions": [{ "field_name": "状态", "operator": "is", "value": "已完成" }] }
+}
+```
+
+统计行数用 `count_all: true` 代替 `series`；`text` 类型 block 用 `{"text": "…"}`（支持 Markdown）。聚合问答交给 `feishu_query`，这样"哪个大区卖得最多"是一次调用，而不是把整表翻一遍。
 
 ## 工作原理
 

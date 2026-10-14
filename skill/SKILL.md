@@ -74,6 +74,8 @@ value the API resolves, a `date` takes a timestamp in milliseconds.
 | The user wants | Use |
 |---|---|
 | A database / table / 多维表格 / 表格化 | `feishu_bitable` |
+| A chart, a dashboard, a 看板 inside a 多维表格 | `feishu_dashboard` |
+| A total, an average, a count, a top-N, "how many by …" | `feishu_query` |
 | A document, a write-up, notes, a report as a doc | `feishu_doc` |
 | A spreadsheet with rows and columns and formulas | `feishu_sheet` |
 | A file kept in the cloud, or browsing what is there | `feishu_drive` |
@@ -84,6 +86,78 @@ value the API resolves, a `date` takes a timestamp in milliseconds.
 Bitable vs Sheet: if the user will filter, group, or relate rows, or says
 多维表格, use Bitable. If they want a grid of numbers to calculate with, use a
 spreadsheet.
+
+## Charts and dashboards (多维表格 里的图表)
+
+`feishu_dashboard` is the only way to put a chart in a Bitable — the V1 records
+API has no concept of one. Create the dashboard, then add one block per chart:
+
+```
+feishu_dashboard { action: "create_dashboard", baseToken: "bascn...", name: "销售看板" }
+```
+
+```
+feishu_dashboard {
+  action: "create_block",
+  baseToken: "bascn...",
+  dashboardId: "blk...",
+  name: "各大区金额",
+  type: "column",
+  dataConfig: {
+    table_name: "订单表",
+    series: [{ field_name: "金额", rollup: "SUM" }],
+    group_by: [{ field_name: "大区", mode: "integrated", sort: { type: "value", order: "desc" } }]
+  }
+}
+```
+
+Rules that matter:
+
+- **Names, never ids.** `table_name`, `field_name`, and `group_by[].field_name`
+  must match the table exactly. Run `feishu_bitable { action: "list_fields" }`
+  first if unsure.
+- The metric is either `series` (with `rollup`: `SUM` / `MAX` / `MIN` /
+  `AVERAGE`) **or** `count_all: true` — never both, never neither.
+- Types: `column` `bar` `line` `pie` `ring` `area` `combo` `scatter`
+  `funnel` `wordCloud` `radar` `ranking` `statistics` `nps` `text`.
+- A `text` block takes `{ "text": "# Markdown" }` and no table.
+- `ranking` takes exactly one `group_by` and one `series`, plus `limit_size` (Top N).
+- Omit `position` and the server lays the blocks out; pass `{x,y,w,h}` on a
+  12-column grid to control it. Put a chart you want first at the top-left.
+- Create blocks **one at a time** — parallel creates against one dashboard race.
+- `get_block_data` returns the numbers the chart currently shows, which is the
+  way to confirm a chart is actually reading the rows you expect.
+
+## Aggregate questions (总数 / 平均 / 排名)
+
+Do not page a whole table through `feishu_bitable` to add numbers up.
+`feishu_query` does it server-side:
+
+```
+feishu_query {
+  baseToken: "bascn...",
+  tableName: "订单表",
+  dimensions: [{ fieldName: "大区", alias: "region" }],
+  measures:   [{ fieldName: "金额", aggregation: "sum", alias: "total" }],
+  sort:       [{ fieldName: "total", order: "desc" }],
+  limit: 10
+}
+```
+
+Aggregations: `sum` `avg` `min` `max` `count` `count_all`
+`distinct_count`. `sum` and `avg` need a number field; the rest work on any
+type. At least one dimension or one measure is required.
+
+Filters use `{ fieldName, operator, value }` where `value` is a one-element
+string array — numbers as strings, e.g. `["1000"]`. `isEmpty` and
+`isNotEmpty` take no value and must be given an empty array. Operators: `is`
+`isNot` `contains` `doesNotContain` `isEmpty` `isNotEmpty` `isGreater`
+`isGreaterEqual` `isLess` `isLessEqual`.
+
+Two gotchas worth knowing: an existing field name and an output alias share one
+namespace, so give measures aliases when you sort or filter on them; and a group
+that has no value comes back as a row of `null`, which usually means blanks in
+the source data rather than a bug.
 
 ## Writing a document
 

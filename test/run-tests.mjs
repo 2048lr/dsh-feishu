@@ -411,7 +411,7 @@ async function main() {
         sdk.assertSupportedJsonSchema(definition.parameters);
         sdk.assertSupportedJsonSchema(definition.output.schema);
       }
-      equal(definitions.length, 8);
+      equal(definitions.length, 10);
     });
     await test('every parameter schema renders to a TypeScript SDK type', () => {
       for (const definition of definitions) {
@@ -1030,12 +1030,14 @@ async function main() {
     try {
       const { ctx, recorded } = fakeCtx({ credentials: store });
       indexMod.apply(ctx, { appId: 'cli_1', appSecret: 'secret' });
-      equal(recorded.tools.length, 8);
+      equal(recorded.tools.length, 10);
       equal(recorded.routes.length, 6);
       assert(recorded.routes.some((route) => route.path === '/api/feishu/config'), 'expected the config route');
       equal(recorded.sections.length, 1);
       equal(recorded.sections[0].name, 'tool:feishu');
       assert(recorded.tools.some((entry) => entry.name === 'feishu_bitable'), 'expected the Bitable tool');
+      assert(recorded.tools.some((entry) => entry.name === 'feishu_dashboard'), 'expected the V3 dashboard tool');
+      assert(recorded.tools.some((entry) => entry.name === 'feishu_query'), 'expected the V3 query tool');
       assert(recorded.routes.some((route) => route.path === routesMod.ROUTES.oauthCallback), 'expected the OAuth callback route');
     } finally {
       globalThis.fetch = previous;
@@ -1048,7 +1050,7 @@ async function main() {
     try {
       const { ctx, recorded } = fakeCtx({ webServer: false, systemPrompt: false });
       indexMod.apply(ctx, { appId: 'cli_1', appSecret: 'secret' });
-      equal(recorded.tools.length, 8);
+      equal(recorded.tools.length, 10);
       equal(recorded.routes.length, 0);
       equal(recorded.sections.length, 0);
     } finally {
@@ -1073,6 +1075,138 @@ async function main() {
     } finally {
       globalThis.fetch = previous;
     }
+  });
+
+  // ------------------------------------------------------ V3 dashboards + query
+  console.log('');
+  console.log('base v3 (dashboards and aggregation)');
+  const dashMod = await import('file:///' + join(LIB, 'tools', 'dashboard.js').replace(/\\/gu, '/'));
+  const queryMod = await import('file:///' + join(LIB, 'tools', 'query.js').replace(/\\/gu, '/'));
+
+  await test('rejects a chart with no metric and a text block with no text', () => {
+    assert(dashMod.validateDataConfig('column', { table_name: 'T' }).some((p) => p.includes('series')), 'a chart needs a metric');
+    assert(dashMod.validateDataConfig('text', {}).some((p) => p.includes('text')), 'a text block needs text');
+    assert(dashMod.validateDataConfig('column', { table_name: 'T', count_all: true }).length === 0, 'count_all is a valid metric');
+    assert(dashMod.validateDataConfig('column', { series: [{ field_name: 'a', rollup: 'SUM' }] }).some((p) => p.includes('table_name')), 'table_name is required');
+    assert(dashMod.validateDataConfig('column', { table_name: 'T', series: [{ field_name: 'a', rollup: 'MEDIAN' }] }).some((p) => p.includes('rollup')), 'rollup must be one of the four');
+    assert(dashMod.validateDataConfig('ranking', { table_name: 'T', count_all: true, group_by: [{ field_name: 'a' }, { field_name: 'b' }] }).some((p) => p.includes('exactly one group_by')), 'ranking takes one group');
+    assert(dashMod.validateDataConfig('text', { text: '# hi' }).length === 0, 'a text block with markdown is valid');
+  });
+  await test('requires all four position keys when a position is given', () => {
+    assert(dashMod.validatePosition({ x: 0, y: 0, w: 6, h: 4 }).length === 0, 'a complete position is valid');
+    assert(dashMod.validatePosition({ x: 0, y: 0, w: 6 }).some((p) => p.includes('h')), 'a partial position is rejected');
+    assert(dashMod.validatePosition(undefined).length === 0, 'an absent position is fine (server auto-layout)');
+  });
+  await test('creates a dashboard and a chart block and reads the computed data', async () => {
+    const mock = mockFeishu();
+    mock.route('POST', '/open-apis/auth/v3/tenant_access_token/internal', () => ({ body: { code: 0, tenant_access_token: 't1', expire: 7200 } }));
+    mock.route('POST', '/open-apis/base/v3/bases/bas1/dashboards', () => ({ body: { code: 0, data: { dashboard_id: 'blk1', name: '销售看板', theme: { theme_style: 'default' } } } }));
+    mock.route('POST', '/open-apis/base/v3/bases/bas1/dashboards/blk1/blocks', () => ({ body: { code: 0, data: { block_id: 'cht1', name: '金额', type: 'column', position: { x: 0, y: 0, w: 6, h: 4 } } } }));
+    mock.route('GET', '/open-apis/base/v3/bases/bas1/dashboards/blocks/cht1/data', () => ({ body: { code: 0, data: { main_data: [{ 城市: { value: '北京' }, 金额: { value: 120 } }] } } }));
+    const { config, identity, client } = compose(mock);
+    const definitions = toolsMod.buildTools({ client, identity, config, resolveRedirectUri: () => REDIRECT });
+    const tool = find(definitions, 'feishu_dashboard');
+    const created = await tool.execute({ action: 'create_dashboard', baseToken: 'bas1', name: '销售看板' }, {});
+    equal(created.data.dashboard_id, 'blk1');
+    const block = await tool.execute({
+      action: 'create_block', baseToken: 'bas1', dashboardId: 'blk1', name: '金额', type: 'column',
+      dataConfig: { table_name: '订单表', series: [{ field_name: '金额', rollup: 'SUM' }], group_by: [{ field_name: '城市' }] },
+      position: { x: 0, y: 0, w: 6, h: 4 },
+    }, {});
+    equal(block.data.block_id, 'cht1');
+    const data = await tool.execute({ action: 'get_block_data', baseToken: 'bas1', blockId: 'cht1' }, {});
+    equal(data.data.main_data.length, 1);
+    const dataCall = mock.log.find((entry) => entry.path.endsWith('/dashboards/blocks/cht1/data'));
+    assert(dataCall !== undefined && !dataCall.path.includes('blk1'), 'the computed-data path must not carry the dashboard id: ' + (dataCall && dataCall.path));
+  });
+  await test('a chart create rejects an unusable dataConfig before any network call', async () => {
+    const mock = mockFeishu();
+    const { config, identity, client } = compose(mock);
+    const definitions = toolsMod.buildTools({ client, identity, config, resolveRedirectUri: () => REDIRECT });
+    const tool = find(definitions, 'feishu_dashboard');
+    await rejects(() => tool.execute({ action: 'create_block', baseToken: 'bas1', dashboardId: 'd1', name: 'x', type: 'pie', dataConfig: { table_name: 'T' } }, {}), 'series');
+    await rejects(() => tool.execute({ action: 'create_block', baseToken: 'bas1', dashboardId: 'd1', name: 'x', type: 'text', dataConfig: {} }, {}), 'text');
+    equal(mock.log.length, 0);
+  });
+  await test('lists dashboards and blocks', async () => {
+    const mock = mockFeishu();
+    mock.route('POST', '/open-apis/auth/v3/tenant_access_token/internal', () => ({ body: { code: 0, tenant_access_token: 't1', expire: 7200 } }));
+    mock.route('GET', '/open-apis/base/v3/bases/bas1/dashboards', () => ({ body: { code: 0, data: { items: [{ dashboard_id: 'blk1', name: 'D' }], has_more: false, total: 1 } } }));
+    mock.route('GET', '/open-apis/base/v3/bases/bas1/dashboards/blk1/blocks', () => ({ body: { code: 0, data: { items: [{ block_id: 'cht1', name: 'B', type: 'line' }], has_more: false, total: 1 } } }));
+    const { config, identity, client } = compose(mock);
+    const definitions = toolsMod.buildTools({ client, identity, config, resolveRedirectUri: () => REDIRECT });
+    const tool = find(definitions, 'feishu_dashboard');
+    const list = await tool.execute({ action: 'list_dashboards', baseToken: 'bas1' }, {});
+    equal(list.data.dashboards.length, 1);
+    const blocks = await tool.execute({ action: 'list_blocks', baseToken: 'bas1', dashboardId: 'blk1' }, {});
+    equal(blocks.data.blocks[0].type, 'line');
+  });
+
+  await test('builds a LiteQuery DSL that names the table and fields', () => {
+    const dsl = queryMod.buildDsl({
+      tableName: '订单表',
+      dimensions: [{ fieldName: '城市', alias: 'dim_city' }],
+      measures: [{ fieldName: '金额', aggregation: 'SUM', alias: 'total' }],
+      filters: { conjunction: 'and', conditions: [{ fieldName: '状态', operator: 'is', value: ['已完成'] }, { fieldName: '备注', operator: 'isEmpty' }] },
+      sort: [{ fieldName: 'total', order: 'desc' }],
+      limit: 20,
+    });
+    equal(dsl.datasource.table.tableName, '订单表');
+    equal(dsl.measures[0].aggregation, 'sum', 'aggregations are lower-cased');
+    equal(JSON.stringify(dsl.dimensions), '[{"field_name":"城市","alias":"dim_city"}]');
+    equal(dsl.filters.type, 1);
+    equal(dsl.filters.conditions[1].operator, 'isEmpty');
+    equal(JSON.stringify(dsl.filters.conditions[1].value), '[]', 'a valueless operator sends an empty array');
+    equal(dsl.sort[0].order, 'desc');
+    equal(dsl.pagination.limit, 20);
+    equal(dsl.shaper.format, 'flat');
+    equal(dsl.datasource.table.tableId, undefined);
+  });
+  await test('prefers tableId and rejects an unusable query', async () => {
+    equal(queryMod.buildDsl({ tableId: 'tbl1', tableName: 'T', measures: [{ fieldName: 'a', aggregation: 'count' }] }).datasource.table.tableId, 'tbl1');
+    for (const bad of [
+      { measures: [{ fieldName: 'a', aggregation: 'count' }] },
+      { tableName: 'T' },
+      { tableName: 'T', measures: [{ fieldName: 'a', aggregation: 'median' }] },
+      { tableName: 'T', measures: [{ fieldName: 'a', aggregation: 'sum' }], filters: { conditions: [{ fieldName: 'f', operator: 'isEmpty', value: ['x'] }] } },
+      { tableName: 'T', measures: [{ fieldName: 'a', aggregation: 'sum' }], filters: { conditions: [{ fieldName: 'f', operator: 'is' }] } },
+      { tableName: 'T', measures: [{ fieldName: 'a', aggregation: 'sum' }], filters: { conditions: [{ fieldName: 'f', operator: 'wat' }] } },
+    ]) {
+      await rejects(() => queryMod.buildDsl(bad));
+    }
+  });
+  await test('runs a query and flattens the columnar reply', async () => {
+    const mock = mockFeishu();
+    mock.route('POST', '/open-apis/auth/v3/tenant_access_token/internal', () => ({ body: { code: 0, tenant_access_token: 't1', expire: 7200 } }));
+    mock.route('POST', '/open-apis/base/v3/bases/bas1/data/query', () => ({
+      body: { code: 0, data: { main_data: [{ city: { value: '北京' }, n: { value: 12 } }, { city: { value: '上海' }, n: { value: 7 } }] } },
+    }));
+    const { config, identity, client } = compose(mock);
+    const definitions = toolsMod.buildTools({ client, identity, config, resolveRedirectUri: () => REDIRECT });
+    const tool = find(definitions, 'feishu_query');
+    const value = await tool.execute({
+      baseToken: 'bas1', tableName: '订单表',
+      dimensions: [{ fieldName: '城市', alias: 'city' }],
+      measures: [{ fieldName: '金额', aggregation: 'count', alias: 'n' }],
+    }, {});
+    equal(value.data.rows[0].city, '北京');
+    equal(value.data.rows[0].n, 12, 'the {value} wrapper is unwrapped');
+    equal(JSON.stringify(value.data.columns), '["city","n"]');
+    const sent = JSON.parse(String(mock.log.find((entry) => entry.path.endsWith('/data/query')).body));
+    equal(sent.datasource.table.tableName, '订单表');
+    equal(sent.shaper.format, 'flat');
+  });
+  await test('forwards a raw dsl unchanged', async () => {
+    const mock = mockFeishu();
+    mock.route('POST', '/open-apis/auth/v3/tenant_access_token/internal', () => ({ body: { code: 0, tenant_access_token: 't1', expire: 7200 } }));
+    mock.route('POST', '/open-apis/base/v3/bases/bas1/data/query', () => ({ body: { code: 0, data: { main_data: [] } } }));
+    const { config, identity, client } = compose(mock);
+    const definitions = toolsMod.buildTools({ client, identity, config, resolveRedirectUri: () => REDIRECT });
+    const tool = find(definitions, 'feishu_query');
+    const raw = { datasource: { type: 'table', table: { tableName: 'T' } }, measures: [{ field_name: 'a', aggregation: 'max', alias: 'm' }], shaper: { format: 'flat' } };
+    await tool.execute({ baseToken: 'bas1', dsl: raw }, {});
+    const sent = JSON.parse(String(mock.log.find((entry) => entry.path.endsWith('/data/query')).body));
+    equal(JSON.stringify(sent), JSON.stringify(raw));
   });
 
   // ------------------------------------------------------------ browser half

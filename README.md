@@ -10,6 +10,8 @@ panel that shows what it did and fixes authorization in one click):
 | Tool | What it does |
 |---|---|
 | `feishu_bitable` | Create **Bitable (多维表格)** apps with their tables and fields in one call; list tables and fields; insert, search, update, and delete records in batches |
+| `feishu_dashboard` | Create dashboards and **chart blocks** inside a Bitable (柱状图 / 折线图 / 饼图 / 排行榜 / 指标卡 / NPS … 15 types), position them, and read a chart's computed numbers |
+| `feishu_query` | Run a **grouped, aggregated query** over a table (group by, sum / avg / min / max / count / distinct_count, filter, sort, top-N) with the aggregation done server-side |
 | `feishu_doc` | Create documents; append Markdown (converted to native blocks), append raw blocks, read plain text, or import a local Markdown/Word/Excel/PowerPoint/PDF file as a new cloud document |
 | `feishu_sheet` | Create spreadsheets; add sheets; read, write, and append ranges |
 | `feishu_drive` | Browse folders, create folders, upload and download files, move, delete, read metadata |
@@ -162,6 +164,45 @@ Environment fallbacks: `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_BRAND`,
 `FEISHU_FOLDER_TOKEN`, `FEISHU_USER_ACCESS_TOKEN`.
 
 ---
+
+## The two Bitable API generations
+
+The plugin uses both, deliberately:
+
+- **V1** (`/bitable/v1/apps/...`) for apps, tables, fields, and records. It is the
+  documented public API, and it is what the official Lark/Feishu SDK ships.
+- **V3** (`/base/v3/bases/...`) for the two capabilities V1 does not have at all:
+  dashboards with charts, and server-side aggregation. Note the resource is
+  `bases`, not `apps` — the V1 and V3 paths are not interchangeable, and asking
+  the wrong one answers a plain-text `404 page not found`, not a business error.
+
+V3 is newer than the published SDK, so it is not discoverable from the SDK's
+typings; the shapes here were taken from the official
+[Lark CLI](https://github.com/larksuite/cli) and verified against the live API.
+
+| | V1 | V3 |
+|---|---|---|
+| Field types | numbers (`1` = text) | strings (`"text"`) |
+| Records | row objects `{record_id, fields}` | columnar `data` matrix + `field_id_list` |
+| Batch writes | `{records: [{fields}]}` | `record_id_list` / `by_filter` + `patch` |
+| Aggregation | none | `POST .../data/query`, a DSL naming tables and fields |
+| Charts | none | `dashboards` + `dashboards/{id}/blocks` |
+
+A chart block is described by one `data_config` object, which names a table and
+its fields rather than addressing them by id:
+
+```json
+{
+  "table_name": "订单表",
+  "series": [{ "field_name": "金额", "rollup": "SUM" }],
+  "group_by": [{ "field_name": "类别", "mode": "integrated", "sort": { "type": "value", "order": "desc" } }],
+  "filter": { "conjunction": "and", "conditions": [{ "field_name": "状态", "operator": "is", "value": "已完成" }] }
+}
+```
+
+Use `count_all: true` instead of `series` to count rows, and `{"text": "…"}`
+for a `text` block. Aggregations live in `feishu_query` rather than here, so a
+question like "which region sold most" is one call instead of a table scan.
 
 ## How it works
 
