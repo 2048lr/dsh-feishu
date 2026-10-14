@@ -320,6 +320,68 @@ pwsh -File scripts/uninstall.ps1
 Then restart DeepSeek Harness and delete the stored grant if you want the user
 authorization gone as well.
 
+## Related projects
+
+Feishu / Lark integrations are a crowded space, so it is worth being precise
+about what this plugin is and is not. Everything below is a point-in-time
+description; follow the links for the current state.
+
+### Official
+
+- **[larksuite/lark-openapi-mcp](https://github.com/larksuite/lark-openapi-mcp)**
+  (MIT, npm `@larksuiteoapi/lark-mcp`) — the official Model Context Protocol
+  server, and by far the broadest option: it wraps the published OpenAPI as MCP
+  tools with presets, spanning IM, calendar, contacts, approval, drive, and more.
+  Two caveats matter for document work, and both come from its own README and
+  tool list: editing Feishu cloud-document *content* is stated as unsupported
+  (import and read only), and its Bitable coverage is the V1 surface, where a
+  dashboard appears only as `list` and `copy` — no creating or updating a
+  dashboard or a chart block, and no aggregation.
+- **[larksuite/cli](https://github.com/larksuite/cli)** — the official CLI, with
+  `lark-base` skills and reference documents. This plugin's V3 endpoint shapes
+  and its `data_config` schema were taken from here and then verified against
+  the live API.
+
+### Community Feishu MCP servers
+
+- [shou-nian/feishu-mcp-server](https://github.com/shou-nian/feishu-mcp-server)
+- [leemysw/feishu-docx](https://github.com/leemysw/feishu-docx) — Docs, Sheets,
+  and Bitable in both directions with Markdown, built for agents
+
+### Other DeepSeek Harness plugins
+
+The DSH plugin market lists well over a hundred Feishu/Lark plugins, but the
+overwhelming majority are **IM bridges** — talk to your agent from Feishu,
+approval cards, notifications — which is a different job from this one. The
+closest in kind are:
+
+- [zhengjy01/dsh-feishu-mcp](https://github.com/zhengjy01/dsh-feishu-mcp) — Feishu
+  OpenAPI exposed to DSH over MCP
+- [Mr-SYGao/dsh-feishu-reader](https://github.com/Mr-SYGao/dsh-feishu-reader) —
+  reads Feishu docs, wiki, sheets, and Bitable (read-only)
+- [meliwanx/dsh-office-cli](https://github.com/meliwanx/dsh-office-cli) — wraps
+  the official WeCom / DingTalk / Feishu CLIs
+- [shrekcg/dsh-im-channel](https://github.com/shrekcg/dsh-im-channel) — IM access
+  that also bundles a set of Feishu MCP tools
+
+### What is different here
+
+This plugin is deliberately narrow and deep. Where it goes beyond the
+alternatives above:
+
+- **Writing, not just reading** — Markdown converted into native document blocks,
+  local files imported server-side, spreadsheet writes, Bitable records.
+- **Charts and dashboards** through the V3 API, including reading back a chart's
+  computed numbers.
+- **Server-side aggregation** (`feishu_query`), so "top N by …" is one call
+  instead of a table scan.
+- **User-identity OAuth** with an auto-refreshing grant, so new content lands in
+  the user's own drive rather than the app's space.
+- A **visual settings page**, and errors carrying a per-code remediation hint.
+
+For anything outside that list — calendar, approval, contacts, IM — reach for the
+official MCP or the official CLI, or use the `feishu_api` escape hatch.
+
 ---
 
 ## License

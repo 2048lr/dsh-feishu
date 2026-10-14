@@ -194,6 +194,43 @@ pwsh -File scripts/uninstall.ps1
 
 然后重启 DeepSeek Harness。想连用户授权一起清掉，先跑 `feishu_auth` 的 `logout`。
 
+## 同类项目
+
+飞书集成这个领域已经相当拥挤，所以有必要说清楚**这个插件是什么、不是什么**。以下描述只是**当时**的情况，最新状态请点进链接看。
+
+### 官方
+
+- **[larksuite/lark-openapi-mcp](https://github.com/larksuite/lark-openapi-mcp)**
+  （MIT，npm `@larksuiteoapi/lark-mcp`）—— 官方 Model Context Protocol 服务，覆盖面**远大于**本项目：把飞书开放平台整个 OpenAPI 包成 MCP 工具集，用 preset 启用，涵盖 IM、日历、通讯录、审批、云空间等等。
+  但对"文档类"用途有两个要注意的点，**都来自它自己的 README 和工具清单**：一是它明确写了**云文档内容编辑暂不支持（仅导入和读取）**；二是它的多维表格覆盖的是 **V1** 面 —— 仪表盘只有 `list` 和 `copy`，**没有创建/更新仪表盘、没有图表 block、没有聚合查询**。
+- **[larksuite/cli](https://github.com/larksuite/cli)** —— 官方 CLI，带 `lark-base` 技能与参考文档。本项目的 **V3 接口形态**和 **`data_config` 结构**都取自这里，并已对着线上 API 逐一验证。
+
+### 社区飞书 MCP 服务
+
+- [shou-nian/feishu-mcp-server](https://github.com/shou-nian/feishu-mcp-server)
+- [leemysw/feishu-docx](https://github.com/leemysw/feishu-docx) —— 文档 / 表格 / 多维表格与 Markdown 双向转换，面向 agent
+
+### 其他 DeepSeek Harness 插件
+
+DSH 插件市场里有**一百多个**飞书/Lark 插件，但绝大多数是 **IM 桥**（在飞书里跟 agent 对话、审批卡片、通知推送），和本项目不是一回事。性质最接近的是：
+
+- [zhengjy01/dsh-feishu-mcp](https://github.com/zhengjy01/dsh-feishu-mcp) —— 通过 MCP 把飞书 OpenAPI 接进 DSH
+- [Mr-SYGao/dsh-feishu-reader](https://github.com/Mr-SYGao/dsh-feishu-reader) —— 读取飞书文档 / 知识库 / 表格 / 多维表格（**只读**）
+- [meliwanx/dsh-office-cli](https://github.com/meliwanx/dsh-office-cli) —— 封装官方 企业微信 / 钉钉 / 飞书 CLI
+- [shrekcg/dsh-im-channel](https://github.com/shrekcg/dsh-im-channel) —— IM 接入，顺带打包了一批飞书 MCP 工具
+
+### 本项目的差异
+
+本项目**刻意做得窄而深**。相比上面这些，多出来的能力是：
+
+- **能写，不只是读** —— Markdown 转成原生文档块、本地文件服务端导入、电子表格写入、多维表格记录读写。
+- **图表与仪表盘**（V3 接口），并且能读回图表**算好的数值**。
+- **服务端聚合**（`feishu_query`）："按……取前 N" 是一次调用，而不是把整表翻一遍。
+- **用户身份 OAuth** 且自动刷新，新内容落在**用户自己的云空间**，而不是应用空间。
+- **可视化设置页**，以及按错误码给出修复提示的报错。
+
+这个清单之外的（日历、审批、通讯录、IM），请用官方 MCP 或官方 CLI，或者直接走 `feishu_api` 逃生舱。
+
 ---
 
 ## 许可证
