@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# PowerShell and batch files keep Windows line endings so they run as written.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.ico binary
+*.jpg binary

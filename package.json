@@ -1,0 +1,62 @@
+{
+  "name": "dsh-feishu",
+  "version": "0.1.0",
+  "description": "Deep Feishu / Lark integration for DeepSeek Harness: create Bitable apps, docs, sheets, wiki nodes, uploads and messages in the user's own cloud workspace, plus a user OAuth flow.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/ui/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "skill",
+    "scripts",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node test/run-tests.mjs",
+    "install:profile": "pwsh -File scripts/install.ps1",
+    "uninstall:profile": "pwsh -File scripts/uninstall.ps1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "author": "Run Liu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2048lr/dsh-feishu.git"
+  },
+  "homepage": "https://github.com/2048lr/dsh-feishu#readme",
+  "bugs": {
+    "url": "https://github.com/2048lr/dsh-feishu/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "feishu",
+    "lark",
+    "bitable",
+    "多维表格",
+    "飞书",
+    "deepseek-harness"
+  ]
+}

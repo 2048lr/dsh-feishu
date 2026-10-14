@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Logs and local noise
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Backups the installer and the settings page keep next to real files
+*.bak
+*.dsh-feishu.bak
+*.dsh-feishu.tmp
+
+# Editor and tooling
+.vscode/
+.idea/
+*.swp
