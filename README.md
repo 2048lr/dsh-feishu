@@ -93,8 +93,31 @@ URL to register on the Feishu app and lists the scopes to grant.
 
 ## Install
 
-The plugin is loaded by the Cordis profile loader, so it must be resolvable from
-the profile's `node_modules`.
+Two ways, and they are alternatives — **do not do both.** Each creates a loader
+entry with id `feishu`, and the loader rejects a composition that defines one id
+twice with `duplicate loader entry id`.
+
+### As a bundle (recommended)
+
+The package declares a `dsh.bundle` patch, so a bundle-aware CLI installs and
+mounts it in one step:
+
+```sh
+dsh plugin add github:2048lr/dsh-feishu
+```
+
+That appends `dsh-feishu` to `dsh.profile.bundles` and profile boot merges
+[cordis.patch.yml](cordis.patch.yml), which inserts the plugin row. Nothing else
+needs editing.
+
+The settings page is aware of this: when the profile mounts the bundle, it writes
+an **id-targeted config override** rather than a second `insert`, so saving from
+the GUI never breaks the composition.
+
+### By hand (no CLI)
+
+The plugin must be resolvable from the profile's `node_modules`, so it is copied
+there:
 
 ```powershell
 # from the repository root

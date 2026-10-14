@@ -19,9 +19,13 @@
     "scripts",
     "README.md",
     "README.zh.md",
-    "LICENSE"
+    "LICENSE",
+    "cordis.patch.yml"
   ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [

@@ -83,7 +83,7 @@ if (Test-Path -LiteralPath $resolvedTarget) {
 }
 New-Item -ItemType Directory -Force -Path $resolvedTarget | Out-Null
 
-foreach ($item in @('package.json', 'README.md', 'README.zh.md', 'LICENSE', 'lib', 'skill', 'scripts', 'test')) {
+foreach ($item in @('package.json', 'cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE', 'lib', 'skill', 'scripts', 'test')) {
   $source = Join-Path $pluginRoot $item
   if (-not (Test-Path -LiteralPath $source)) { continue }
   $destination = Join-Path $resolvedTarget $item

@@ -74,9 +74,26 @@
 
 ## 安装
 
-插件由 Cordis profile loader 加载，必须能从 profile 的 `node_modules` 解析到。**建议用拷贝而不是软链接**：软链接的插件会从真实路径解析裸导入，从而错过 SDK。
+两种方式，**二选一，不要都做**。两种都会产生 id 为 `feishu` 的 loader 条目，而同一个 id 出现两次时宿主会直接拒绝加载（`duplicate loader entry id`）。
+
+### 作为 bundle 安装（推荐）
+
+包内声明了 `dsh.bundle` patch，支持 bundle 的 CLI 一条命令即可安装并挂载：
+
+```sh
+dsh plugin add github:2048lr/dsh-feishu
+```
+
+它会把 `dsh-feishu` 追加进 `dsh.profile.bundles`，profile 启动时合并 [cordis.patch.yml](cordis.patch.yml) 插入插件条目，**不需要再改任何文件**。
+
+设置页也知道这一点：当 profile 以 bundle 方式挂载时，它写的是**按 id 的配置覆盖**，而不是再插一条，所以从图形界面保存不会破坏配置树。
+
+### 手工安装（不用 CLI）
+
+插件必须能从 profile 的 `node_modules` 解析到，所以要拷进去。**用拷贝而不是软链接**：软链接的插件会从真实路径解析裸导入，从而错过 SDK。
 
 ```powershell
+# 在仓库根目录执行
 pwsh -File scripts/install.ps1
 ```
 

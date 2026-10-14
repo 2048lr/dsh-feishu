@@ -1,0 +1,23 @@
+# dsh-feishu bundle patch.
+#
+# This file is the `dsh.bundle.patch` layer of the package. When the plugin is
+# installed as a bundle —
+#
+#   dsh plugin add github:2048lr/dsh-feishu
+#
+# — the CLI appends `dsh-feishu` to the profile's bundle stack, and profile boot
+# merges THIS patch, inserting the plugin row exactly like a hand-written mount
+# line. Nothing else needs editing.
+#
+# Install one way or the other, not both: this row and the manual entry that
+# scripts/install.ps1 writes carry the same loader id, and the loader rejects a
+# duplicate. When the profile mounts this bundle, the settings page notices and
+# writes a config override instead of a second insert.
+#
+# appId is the one required setting; fill it in on 设置 → 飞书 / Feishu, or in the
+# profile's own cordis.patch.yml, which is applied after this layer.
+- insert:
+    - id: feishu
+      name: dsh-feishu
+      config:
+        appId: ''

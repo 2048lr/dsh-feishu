@@ -1560,6 +1560,76 @@ async function main() {
     }
   });
 
+  await test('an install through a bundle gets a config override, not a second insert', async () => {
+    const fixture = await patchFixture();
+    try {
+      // A manual install: nothing declares the bundle, so the settings page has
+      // to create the loader entry itself.
+      equal(entryMod.profileMountsBundle(fixture.file), false, 'no profile manifest means no bundle');
+      entryMod.writeEntry(fixture.file, { appId: 'cli_manual' });
+      let text = await readFile(fixture.file, 'utf8');
+      assert(text.includes('- insert:'), 'a manual install inserts the entry');
+      equal(entryMod.readEntry(text).values.appId, 'cli_manual');
+
+      // A bundle install: the bundle patch already inserts the row, so inserting
+      // again would define one loader id twice and the loader rejects that.
+      await writeFile(join(dirname(fixture.file), 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-feishu'] } } }), 'utf8');
+      equal(entryMod.profileMountsBundle(fixture.file), true);
+      const outcome = entryMod.writeEntry(fixture.file, { appId: 'cli_bundle' });
+      equal(outcome.ok, true);
+      text = await readFile(fixture.file, 'utf8');
+      assert(!text.includes('- insert:'), 'a bundle mount must not insert a second entry');
+      assert(text.includes('- id: feishu'), 'it writes an id-targeted override');
+      assert(text.includes("appId: 'cli_bundle'"), 'the override carries the configuration');
+      const reread = entryMod.readEntry(text);
+      equal(reread.found, true);
+      equal(reread.values.appId, 'cli_bundle');
+      assert(text.includes('desktop-shell'), 'other entries survive');
+    } finally {
+      await rm(fixture.dir, { recursive: true, force: true });
+    }
+  });
+  await test('recognizes the bundle through several spellings', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-feishu-mount-'));
+    const profileDir = join(dir, 'profiles', 'test');
+    await mkdir(profileDir, { recursive: true });
+    const file = join(profileDir, 'cordis.patch.yml');
+    await writeFile(file, SAMPLE_PATCH, 'utf8');
+    const cases = [
+      ['dsh-feishu', true],
+      ['github:2048lr/dsh-feishu', true],
+      ['@scope/dsh-feishu', true],
+      ['dsh-feishu-bot', false],
+      ['other-plugin', false],
+    ];
+    try {
+      for (const [entry, expected] of cases) {
+        await writeFile(join(profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: [entry] } } }), 'utf8');
+        equal(entryMod.profileMountsBundle(file), expected, 'bundle list [' + entry + ']');
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  await test('the shipped cordis.patch.yml is a valid bundle patch', async () => {
+    let yaml;
+    try {
+      yaml = await import('file:///C:/Users/Admin/.dsh/profiles/desktop/node_modules/js-yaml/dist/js-yaml.mjs');
+    } catch (error) {
+      return;
+    }
+    const manifest = JSON.parse(await readFile(join(HERE, '..', 'package.json'), 'utf8'));
+    equal(manifest.dsh.bundle.patch, './cordis.patch.yml', 'the manifest must declare the bundle patch');
+    assert(manifest.files.includes('cordis.patch.yml'), 'the patch must ship with the package');
+    const loaded = yaml.default.load(await readFile(join(HERE, '..', 'cordis.patch.yml'), 'utf8'));
+    equal(Array.isArray(loaded), true);
+    equal(loaded.length, 1);
+    const row = loaded[0].insert[0];
+    equal(row.id, 'feishu');
+    equal(row.name, 'dsh-feishu');
+    equal(typeof row.config, 'object', 'the row carries a starting config');
+  });
+
   // ------------------------------------------------------- settings endpoints
   console.log('');
   console.log('settings endpoints');
